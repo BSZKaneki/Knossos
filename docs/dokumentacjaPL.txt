@@ -1,0 +1,95 @@
+DOKUMENTACJA – Generator i algorytmy rozwiązywania labiryntów
+
+1. CEL PROJEKTU
+----------------
+Program służy do generowania labiryntów o zadanej wielkości oraz porównania dwóch podstawowych algorytmów znajdowania ścieżki: BFS (Breadth-First Search) i DFS (Depth-First Search). Kod wizualizuje proces generowania labiryntu oraz eksploracji ścieżki w czasie rzeczywistym.
+
+2. STRUKTURA PROJEKTU
+---------------------
+- main.rs          – główny plik programu, inicjalizacja okna, rysowanie labiryntu, wywołanie algorytmów.
+- Maze struct      – struktura reprezentująca labirynt:
+    * start_point – punkt startowy labiryntu
+    * end_point   – punkt końcowy labiryntu
+    * width, height – wymiary labiryntu
+    * grid        – wektor komórek (Cell)
+- Cell struct      – struktura reprezentująca pojedynczą komórkę:
+    * walls[4]    – tablica booli, informująca o obecności ścian w kierunkach [N, E, S, W]
+    * visited     – informacja, czy komórka została odwiedzona podczas generowania
+
+3. GENEROWANIE LABIRYNTU
+-------------------------
+Program obsługuje dwa tryby:
+1. Perfect Maze (bez pętli) – generowanie algorytmem DFS w wersji iteracyjnej. Każda komórka zostaje odwiedzona dokładnie raz, dzięki czemu powstaje labirynt bez cykli.
+2. Imperfect Maze (z pętlami) – po wygenerowaniu labiryntu perfect, losowo usuwa wybrane ściany, tworząc dodatkowe połączenia między komórkami (pętle).
+
+Algorytm DFS do generowania labiryntu działa następująco:
+- Zaczynamy od komórki startowej.
+- Tworzymy stos odwiedzonych komórek.
+- Wybieramy losowego sąsiada, który nie był odwiedzony.
+- Usuwamy ścianę między aktualną komórką a sąsiadem i oznaczamy sąsiada jako odwiedzonego.
+- Dodajemy aktualną komórkę z powrotem na stos, a następnie sąsiada.
+- Powtarzamy, aż stos będzie pusty.
+
+4. ALGORYTMY ZNAJDOWANIA ŚCIEŻKI
+---------------------------------
+1. BFS (Breadth-First Search)
+- Przeszukuje labirynt warstwami (poziomami od startu).
+- Gwarantuje znalezienie najkrótszej ścieżki między startem a końcem.
+- Używa kolejki (VecDeque) do przechowywania komórek do odwiedzenia.
+- Ścieżka odtworzona jest za pomocą tablicy came_from.
+
+2. DFS (Depth-First Search)
+- Przeszukuje labirynt w głąb.
+- Może nie znaleźć najkrótszej ścieżki.
+- Używa stosu (Vec) do przechowywania komórek do odwiedzenia.
+- Ścieżka odtworzona jest analogicznie do BFS.
+
+Dodatkowo oba algorytmy mierzą:
+- liczba kroków (steps)
+- czas wykonania (w ms)
+- pełna ścieżka eksploracji (entire_path)
+- ostateczna ścieżka rozwiązania (path)
+
+5. WIZUALIZACJA
+----------------
+Do wyświetlania labiryntu i ścieżek używana jest biblioteka minifb:
+- Labirynt rysowany jest jako siatka prostokątów (komórek).
+- Ściany komórek reprezentowane są kolorami (szary).
+- Ścieżki BFS i DFS mają różne kolory.
+- Animacja ścieżki odbywa się w partiach (batch) dla płynności.
+
+Funkcje pomocnicze:
+- draw_char / draw_text – rysowanie znaków na ekranie (statystyki, tytuły)
+- draw_path – rysowanie ścieżki w labiryncie
+- batch update – animacja krok po kroku bez spadku FPS
+
+6. OBSŁUGA I KONFIGURACJA
+--------------------------
+- SCREEN_WIDTH / SCREEN_HEIGHT – rozmiar okna
+- MAZE_SIZE – wymiary labiryntu w komórkach
+- USE_PERFECT_MAZE – tryb generowania labiryntu
+- SKIP_VISUALIZATION – pomija animację
+- BATCH_SIZE – liczba komórek rysowanych w jednej aktualizacji
+
+7. TESTY
+---------
+Kod posiada testy jednostkowe, które sprawdzają:
+- poprawność inicjalizacji labiryntu
+- pełne odwiedzenie komórek po generacji
+- poprawność działania BFS i DFS
+- zachowanie przy braku możliwej ścieżki
+
+8. PODSUMOWANIE
+----------------
+Program demonstruje:
+- generowanie labiryntu metodą DFS
+- dodawanie pętli w labiryncie
+- porównanie algorytmów BFS i DFS
+- wizualizację działania algorytmów
+- podstawy teorii grafów w praktyce (reprezentacja w postaci siatki komórek)
+
+Kod jest modułowy, pozwala na łatwe zmiany:
+- wielkość labiryntu
+- tryb generowania (perfect / imperfect)
+- wizualizacja ścieżek i statystyk
+
