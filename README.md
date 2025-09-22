@@ -26,11 +26,10 @@ It features a real-time visualization powered by [minifb](https://github.com/emo
 |-----------------|-----------------|--------------|
 | ![bfs](docs/bfs.gif) | ![dfs](docs/dfs.gif) | ![stats](docs/stats.png) |
 
-*(Replace with your own gifs/screenshots if you run the project.)*  
 
 ## Getting Started
 
 ### 1. Clone the repo
 ```bash
-git clone https://github.com/yourusername/maze-pathfinding-rust.git
-cd maze-pathfinding-rust
+git clone https://github.com/BSZKaneki/Knossos
+cd Knossos

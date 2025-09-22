@@ -272,7 +272,7 @@ fn main() {
     const USE_PERFECT_MAZE: bool = false;
     const SKIP_VISUALIZATION: bool = false;
     const MAZE_SIZE: (usize, usize) = (240, 140);
-    const BATCH_SIZE: usize = 20; // Draw this many cells per screen update for a smooth animation
+    const BATCH_SIZE: usize = 40; // Draw this many cells per screen update for a smooth animation
 
     // --- INITIALIZATION ---
     let mut buffer: Vec<u32> = vec![0; SCREEN_WIDTH * SCREEN_HEIGHT];
