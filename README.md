@@ -33,3 +33,14 @@ It features a real-time visualization powered by [minifb](https://github.com/emo
 ```bash
 git clone https://github.com/BSZKaneki/Knossos
 cd Knossos
+```
+
+### 2. Run the repo 
+```bash
+cargo run
+```
+
+### 3. Run testes
+```bash
+cargo test
+```
