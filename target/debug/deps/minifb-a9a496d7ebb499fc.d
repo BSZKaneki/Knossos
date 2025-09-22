@@ -1,0 +1,12 @@
+D:\programing\rust\Knossos\target\debug\deps\minifb-a9a496d7ebb499fc.d: C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\lib.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\error.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\icon.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\key.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\key_handler.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\os\mod.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\os\windows\mod.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\rate.rs
+
+D:\programing\rust\Knossos\target\debug\deps\libminifb-a9a496d7ebb499fc.rmeta: C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\lib.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\error.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\icon.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\key.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\key_handler.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\os\mod.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\os\windows\mod.rs C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\rate.rs
+
+C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\lib.rs:
+C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\error.rs:
+C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\icon.rs:
+C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\key.rs:
+C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\key_handler.rs:
+C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\os\mod.rs:
+C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\os\windows\mod.rs:
+C:\Users\bacio\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\minifb-0.28.0\src\rate.rs:
