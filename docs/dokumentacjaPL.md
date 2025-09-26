@@ -1,67 +1,79 @@
+Below is the updated and corrected version of the documentation in Polish, aligned with the provided Rust code and the updated project description. The changes ensure clarity, consistency with the code, and proper formatting. I've fixed grammatical issues, improved readability, and ensured the content accurately reflects the modular and extensible nature of the project.
 
 ---
 
 ```markdown
 # Dokumentacja: Dynamiczny Generator i Solver Labiryntów
 
-Ten dokument opisuje architekturę, konfigurację i możliwości rozbudowy projektu.
+Ten dokument opisuje architekturę, konfigurację oraz możliwości rozbudowy projektu generującego i rozwiązującego labirynty.
 
 ## 1. Cel Projektu
 ---
-Głównym celem projektu jest stworzenie elastycznej platformy do generowania labiryntów oraz wizualnego porównywania wydajności dowolnej liczby algorytmów wyszukiwania ścieżki. Dzięki modularnej budowie, dodawanie nowych algorytmów jest proste i nie wymaga modyfikacji głównej logiki symulacji.
+Celem projektu jest stworzenie elastycznej platformy do generowania labiryntów oraz wizualnego porównywania wydajności różnych algorytmów wyszukiwania ścieżki. Modularna architektura umożliwia łatwe dodawanie nowych algorytmów bez konieczności modyfikacji głównej logiki symulacji, a dynamiczna pętla pozwala na uruchamianie ich w dowolnej kolejności.
 
 ## 2. Struktura Projektu
 ---
-Kod został zaprojektowany z myślą o maksymalnej elastyczności, oddzielając dane konfiguracyjne, logikę i wizualizację.
+Kod został zaprojektowany z myślą o modularności i czytelności, oddzielając konfigurację, logikę i wizualizację.
 
-*   **`Config` (struct):**
-    Centralny obiekt konfiguracyjny. Kluczowym polem jest `algorithms_to_run: Vec<Algorithm>`, które pozwala zdefiniować listę algorytmów do uruchomienia w jednej symulacji.
+- **`Config` (struct):**  
+  Centralny obiekt konfiguracyjny, definiujący parametry symulacji. Kluczowe pole `algorithms_to_run: Vec<Algorithm>` określa sekwencję algorytmów do uruchomienia.
 
-*   **`Simulation` (struct):**
-    Główny kontroler aplikacji. Jego pętla dynamicznie iteruje po liście algorytmów z konfiguracji, uruchamiając dla każdego obliczenia i wizualizację, a na końcu wyświetlając zbiorcze wyniki.
+- **`Simulation` (struct):**  
+  Główny kontroler aplikacji. Zarządza pętlą symulacji, która dynamicznie iteruje po liście algorytmów, wykonując obliczenia, wizualizację i wyświetlając zbiorcze wyniki.
 
-*   **`Visualization` (struct):**
-    Moduł odpowiedzialny za renderowanie. Rysuje stan labiryntu, animacje poszukiwań oraz dynamicznie generowany ekran statystyk końcowych.
+- **`Visualization` (struct):**  
+  Moduł odpowiedzialny za renderowanie labiryntu, animacje poszukiwań oraz ekran statystyk końcowych, generowany dynamicznie dla wszystkich algorytmów.
 
-*   **`Maze` (struct):**
-    Reprezentacja labiryntu. Zawiera logikę generowania oraz implementacje poszczególnych algorytmów wyszukiwania ścieżki.
+- **`Maze` (struct):**  
+  Reprezentacja labiryntu. Zawiera logikę generowania labiryntu oraz implementacje algorytmów wyszukiwania ścieżki.
 
-*   **System Algorytmów:**
-    *   `Algorithm` (enum): Identyfikator dla każdego algorytmu (np. `Bfs`, `Dfs`).
-    *   `AlgorithmInfo` (struct): Przechowuje wszystkie metadane algorytmu: jego nazwę, przypisane kolory oraz wskaźnik na funkcję implementującą jego logikę.
-    *   `get_algorithm_info()` (funkcja): Centralna "rejestracja" algorytmów.
-    *   `PathfindingResult` (struct): Przechowuje wyniki działania jednego algorytmu w celu późniejszego wyświetlenia.
+- **System Algorytmów:**  
+  - `Algorithm` (enum): Identyfikator algorytmów (np. `Bfs`, `Dfs`).  
+  - `AlgorithmInfo` (struct): Przechowuje metadane algorytmu: nazwę, kolory wizualizacji i wskaźnik na funkcję implementującą.  
+  - `get_algorithm_info` (funkcja): Centralne miejsce rejestracji algorytmów.  
+  - `PathfindingResult` (struct): Przechowuje wyniki algorytmu (liczba kroków, czas, długość ścieżki) do wyświetlenia na ekranie statystyk.
 
 ## 3. Generowanie Labiryntu
 ---
-Aplikacja wspiera dwa tryby generowania:
-
-1.  **Idealny Labirynt (Perfect Maze):** Generowany przez DFS, bez cykli, z jedną unikalną ścieżką między dowolnymi dwoma punktami.
-2.  **Niedoskonały Labirynt (Imperfect Maze):** Po stworzeniu idealnego labiryntu, usuwana jest część ścian, co tworzy pętle i alternatywne drogi.
+Projekt wspiera dwa tryby generowania labiryntów:
+1. **Idealny Labirynt (Perfect Maze):** Generowany algorytmem DFS (rekurencyjne cofanie), bez cykli, z jedną unikalną ścieżką między punktami.  
+2. **Niedoskonały Labirynt (Imperfect Maze):** Bazuje na idealnym labiryncie, ale usuwa losowo wybrane ściany, tworząc pętle i alternatywne ścieżki.
 
 ## 4. System Algorytmów Znajdowania Ścieżki
 ---
-System jest w pełni dynamiczny i sterowany konfiguracją. Główna pętla symulacji pobiera zdefiniowaną przez użytkownika listę algorytmów i dla każdego z nich:
-1.  Pobiera jego metadane (nazwę, kolory, funkcję) z `get_algorithm_info`.
-2.  Wykonuje obliczenia, wywołując wskazaną funkcję.
-3.  Uruchamia wizualizację (jeśli nie jest pomijana).
-4.  Zapisuje wyniki do późniejszego wyświetlenia.
+System jest w pełni dynamiczny i sterowany konfiguracją. Pętla symulacji:
+1. Pobiera listę algorytmów z `Config::algorithms_to_run`.  
+2. Dla każdego algorytmu:  
+   - Pobiera metadane z `get_algorithm_info` (nazwa, kolory, funkcja).  
+   - Wykonuje obliczenia, wywołując odpowiednią funkcję pathfindingu.  
+   - Uruchamia wizualizację (jeśli nie jest pomijana).  
+   - Zapisuje wyniki do późniejszego wyświetlenia.  
+3. Wyświetla zbiorczy ekran statystyk dla wszystkich algorytmów.
+
+Obecnie zaimplementowane algorytmy:
+- **BFS (Breadth-First Search):** Zawsze znajduje najkrótszą ścieżkę.  
+- **DFS (Depth-First Search):** Znajduje poprawną ścieżkę, ale niekoniecznie najkrótszą.
 
 ## 5. Wizualizacja
 ---
--   Wizualizacja jest w pełni sterowana danymi z `AlgorithmInfo`. Tytuł animacji i kolory są pobierane dynamicznie dla każdego algorytmu.
--   Po zakończeniu animacji jednego algorytmu, widok labiryntu jest resetowany przed uruchomieniem kolejnego.
--   Ekran statystyk końcowych jest generowany dynamicznie i wyświetla podsumowanie dla wszystkich uruchomionych algorytmów.
+- Wizualizacja jest sterowana dynamicznie na podstawie danych z `AlgorithmInfo`. Każdy algorytm ma unikalne kolory dla animacji poszukiwań i ścieżki.  
+- Po zakończeniu wizualizacji jednego algorytmu labirynt jest resetowany przed uruchomieniem kolejnego.  
+- Ekran statystyk końcowych wyświetla podsumowanie dla wszystkich algorytmów, w tym nazwę, liczbę kroków, czas wykonania i długość ścieżki.
 
 ## 6. Konfiguracja
 ---
-Głównym punktem konfiguracyjnym jest pole `algorithms_to_run` w strukturze `Config`, modyfikowane w funkcji `main` pliku `main.rs`.
+Konfiguracja odbywa się poprzez modyfikację struktury `Config` w funkcji `main` w pliku `main.rs`. Kluczowe opcje:
+- `use_perfect_maze`: `true` dla labiryntu idealnego, `false` dla niedoskonałego.  
+- `skip_visualization`: `true` pomija animacje i wyświetla tylko wyniki.  
+- `maze_width` i `maze_height`: Wymiary labiryntu.  
+- `batch_size`: Liczba komórek przetwarzanych w jednej klatce animacji (kontroluje prędkość).  
+- `target_fps`: Docelowa liczba klatek na sekundę.  
+- `algorithms_to_run`: Wektor określający algorytmy i ich kolejność.
 
-**Przykłady użycia:**
+**Przykłady konfiguracji:**
 
 ```rust
 // main.rs
-
 fn main() {
     let config = Config {
         // Uruchom tylko BFS
@@ -70,7 +82,7 @@ fn main() {
         // Uruchom tylko DFS
         // algorithms_to_run: vec![Algorithm::Dfs],
 
-        // Porównaj DFS z BFS (DFS będzie pierwszy)
+        // Porównaj DFS i BFS (w tej kolejności)
         algorithms_to_run: vec![Algorithm::Dfs, Algorithm::Bfs],
 
         ..Default::default()
@@ -83,40 +95,45 @@ fn main() {
 
 ## 7. Rozszerzalność (Jak Dodać Nowy Algorytm)
 ---
-Struktura projektu sprawia, że dodanie nowego algorytmu (np. A*) jest niezwykle proste i sprowadza się do 3 kroków:
+Dodanie nowego algorytmu (np. A*) wymaga trzech prostych kroków:
 
-1.  **Dodaj identyfikator do enuma `Algorithm`**:
-    ```rust
-    pub enum Algorithm { Bfs, Dfs, AStar }
-    ```
+1. **Dodaj identyfikator do enuma `Algorithm`:**
+   ```rust
+   pub enum Algorithm {
+       Bfs,
+       Dfs,
+       AStar,
+   }
+   ```
 
-2.  **Zarejestruj jego metadane w funkcji `get_algorithm_info`**:
-    Dodaj nową gałąź `match` dla `AStar`, podając jego nazwę, kolory i wskaźnik na funkcję.
-    ```rust
-    fn get_algorithm_info(algo: Algorithm) -> AlgorithmInfo {
-        match algo {
-            // ... istniejące gałęzie
-            Algorithm::AStar => AlgorithmInfo {
-                id: Algorithm::AStar,
-                name: "A*",
-                function: Maze::path_finding_a_star, // Przykładowa nazwa funkcji
-                search_color: 0xAAFF8C00, // np. pomarańczowy
-                path_color: 0xAA00FA9A,   // np. zielony
-            },
-        }
-    }
-    ```
+2. **Zarejestruj metadane w funkcji `get_algorithm_info`:**
+   Dodaj nową gałąź `match` z nazwą, kolorami i wskaźnikiem na funkcję.
+   ```rust
+   fn get_algorithm_info(algo: Algorithm) -> AlgorithmInfo {
+       match algo {
+           // ... istniejące gałęzie ...
+           Algorithm::AStar => AlgorithmInfo {
+               name: "A*",
+               function: Maze::path_finding_a_star,
+               search_color: 0xAAFF8C00, // np. pomarańczowy
+               path_color: 0xAA00FA9A,   // np. zielony
+           },
+       }
+   }
+   ```
 
-3.  **Zaimplementuj logikę w `impl Maze`**:
-    Stwórz nową funkcję `fn path_finding_a_star(&self) -> ...`, która zawiera jego implementację.
+3. **Zaimplementuj logikę w `impl Maze`:**
+   Dodaj nową funkcję, np. `fn path_finding_a_star(&self) -> (usize, u128, Vec<(usize, usize)>, Vec<(usize, usize)>)`, implementującą algorytm.
 
-To wszystko. Główna pętla symulacji i system wizualizacji automatycznie obsłużą nowy algorytm.
+Po tych krokach nowy algorytm będzie automatycznie obsługiwany przez pętlę symulacji i wizualizację. Wystarczy dodać go do `algorithms_to_run` w `Config`.
 
 ## 8. Podsumowanie
 ---
-Projekt jest elastyczną platformą do testowania i wizualizacji algorytmów grafowych. Główne zalety jego architektury to:
--   **Skalowalność:** Można łatwo dodawać nowe algorytmy bez ingerencji w rdzeń programu.
--   **Elastyczność:** Użytkownik może w prosty sposób zdefiniować, które algorytmy chce porównać.
--   **Czystość kodu:** Oddzielenie danych (metadane algorytmów) od logiki (pętla symulacji) sprawia, że kod jest bardziej czytelny i łatwiejszy w utrzymaniu.
+Projekt stanowi elastyczną platformę do testowania i wizualizacji algorytmów wyszukiwania ścieżki w labiryntach. Główne zalety:
+- **Skalowalność:** Łatwe dodawanie nowych algorytmów bez zmian w głównej logice.  
+- **Elastyczność:** Możliwość definiowania sekwencji algorytmów w konfiguracji.  
+- **Czystość kodu:** Wyraźne oddzielenie konfiguracji, logiki i wizualizacji zwiększa czytelność i łatwość utrzymania.  
+- **Wizualizacja:** Intuicyjne animacje i zbiorczy ekran statystyk ułatwiają porównywanie algorytmów.
 
 ```
+
