@@ -1,18 +1,96 @@
 use std::collections::VecDeque;
 use std::thread::sleep;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use minifb::{Window as MiniFbWindow, WindowOptions};
+use minifb::{Key, Window as MiniFbWindow, WindowOptions};
 use rand::prelude::IteratorRandom;
-use rand::{Rng};
+use rand::Rng;
 use font8x8::legacy::BASIC_LEGACY;
 use rayon::prelude::*;
 
+// --- NEW --- An enum to identify the algorithms.
+// To add a new one, just add a variant here (e.g., AStar).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Algorithm {
+    Bfs,
+    Dfs,
+}
+
+// --- NEW --- A struct to hold all information related to a specific algorithm.
+// This makes the simulation loop completely dynamic.
+struct AlgorithmInfo {
+    name: &'static str,
+    function: fn(&Maze) -> (usize, u128, Vec<(usize, usize)>, Vec<(usize, usize)>),
+    search_color: u32,
+    path_color: u32,
+}
+
+// --- NEW --- A centralized place to define the properties of each algorithm.
+// To add a new algorithm, just add a match arm here.
+fn get_algorithm_info(algo: Algorithm) -> AlgorithmInfo {
+    match algo {
+        Algorithm::Bfs => AlgorithmInfo {
+            name: "BFS",
+            function: Maze::path_finding_bfs,
+            search_color: 0xAA0000FF, // Blueish search
+            path_color: 0xAAFFFF00,   // Yellow path
+        },
+        Algorithm::Dfs => AlgorithmInfo {
+            name: "DFS",
+            function: Maze::path_finding_dfs,
+            search_color: 0xAA00FFFF, // Cyan search
+            path_color: 0xAAFF00FF,   // Magenta path
+        },
+    }
+}
+
+// --- NEW --- A struct to hold the results for cleaner data management.
+struct PathfindingResult {
+    name: &'static str,
+    color: u32,
+    steps: usize,
+    duration: u128,
+    path_len: usize,
+}
+
+// --- CONFIGURATION ---
+struct Config {
+    screen_width: usize,
+    screen_height: usize,
+    use_perfect_maze: bool,
+    skip_visualization: bool,
+    maze_width: usize,
+    maze_height: usize,
+    batch_size: usize,
+    target_fps: u64,
+    // --- CHANGED --- We now use a Vec to hold the sequence of algorithms to run.
+    algorithms_to_run: Vec<Algorithm>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            screen_width: 1920,
+            screen_height: 1080,
+            use_perfect_maze: false,
+            skip_visualization: false,
+            maze_width: 240,
+            maze_height: 140,
+            batch_size: 40,
+            target_fps: 60,
+            // --- CHANGED --- Default is now a vector.
+            algorithms_to_run: vec![Algorithm::Bfs, Algorithm::Dfs],
+        }
+    }
+}
+
+
 #[derive(Clone, Copy)]
 struct Cell {
-    walls: [bool; 4], // North, East, South, West
+    walls: [bool; 4],
     visited: bool,
 }
+
 struct Maze {
     start_point: (usize, usize),
     end_point: (usize, usize),
@@ -20,6 +98,8 @@ struct Maze {
     height: usize,
     grid: Vec<Cell>,
 }
+
+// ... The Maze implementation remains exactly the same
 impl Maze {
     fn new(width: usize, height: usize) -> Self {
         let grid = vec![
@@ -37,7 +117,7 @@ impl Maze {
             grid,
         }
     }
-    
+
     fn generate_iterative(&mut self) {
         for cell in self.grid.iter_mut() {
             cell.visited = false;
@@ -76,7 +156,7 @@ impl Maze {
         self.generate_iterative();
 
         let mut rng = rand::rng();
-        let loop_percentage = 0.08; 
+        let loop_percentage = 0.08;
         let walls_to_remove = ((self.width * self.height) as f32 * loop_percentage) as usize;
 
         for _ in 0..walls_to_remove {
@@ -214,324 +294,291 @@ impl Maze {
     }
 }
 
-fn draw_char(buffer: &mut [u32], width: usize, x: usize, y: usize, c: char, color: u32) {
-    if let Some(bitmap) = BASIC_LEGACY.get(c as usize) {
-        for (row, bits) in bitmap.iter().enumerate() {
-            for col in 0..8 {
-                if (bits >> col) & 1 == 1 {
-                    let px = x + col;
-                    let py = y + row;
-                    if px < width && py < (buffer.len() / width) {
-                        buffer[py * width + px] = color;
+
+struct Visualization<'a> {
+    window: MiniFbWindow,
+    buffer: Vec<u32>,
+    config: &'a Config,
+    cell_size: usize,
+    offset_x: usize,
+    offset_y: usize,
+}
+
+// ... Visualization struct has minor changes, mostly simplification
+impl<'a> Visualization<'a> {
+    fn new(config: &'a Config) -> Self {
+        let mut window = MiniFbWindow::new(
+            "Maze Pathfinding",
+            config.screen_width,
+            config.screen_height,
+            WindowOptions::default(),
+        )
+        .unwrap();
+        window.set_target_fps(config.target_fps as usize);
+
+        let buffer = vec![0; config.screen_width * config.screen_height];
+
+        let min_margin = 50;
+        let max_cell_width = (config.screen_width - 2 * min_margin) / config.maze_width;
+        let max_cell_height = (config.screen_height - 2 * min_margin) / config.maze_height;
+        let cell_size = max_cell_width.min(max_cell_height).max(1);
+
+        let maze_width_px = config.maze_width * cell_size;
+        let maze_height_px = config.maze_height * cell_size;
+        let offset_x = (config.screen_width.saturating_sub(maze_width_px)) / 2;
+        let offset_y = (config.screen_height.saturating_sub(maze_height_px)) / 2;
+
+        Self {
+            window,
+            buffer,
+            config,
+            cell_size,
+            offset_x,
+            offset_y,
+        }
+    }
+
+    fn draw_char(&mut self, x: usize, y: usize, c: char, color: u32) {
+        if let Some(bitmap) = BASIC_LEGACY.get(c as usize) {
+            for (row, bits) in bitmap.iter().enumerate() {
+                for col in 0..8 {
+                    if (bits >> col) & 1 == 1 {
+                        let px = x + col;
+                        let py = y + row;
+                        if px < self.config.screen_width && py < (self.buffer.len() / self.config.screen_width) {
+                            self.buffer[py * self.config.screen_width + px] = color;
+                        }
                     }
                 }
             }
         }
     }
-}
 
-fn draw_text(buffer: &mut [u32], width: usize, x: usize, y: usize, text: &str, color: u32) {
-    for (i, c) in text.chars().enumerate() {
-        draw_char(buffer, width, x + i * 8, y, c, color);
+    fn draw_text(&mut self, x: usize, y: usize, text: &str, color: u32) {
+        for (i, c) in text.chars().enumerate() {
+            self.draw_char(x + i * 8, y, c, color);
+        }
+    }
+    
+    fn draw_maze(&mut self, maze: &Maze) {
+        self.buffer.fill(0x00101020);
+        let wall_color = 0xFF808080;
+        let maze_width_px = self.config.maze_width * self.cell_size;
+        let maze_height_px = self.config.maze_height * self.cell_size;
+
+        self.buffer
+            .par_chunks_mut(self.config.screen_width)
+            .enumerate()
+            .for_each(|(y_pixel, row_slice)| {
+                if y_pixel < self.offset_y || y_pixel >= self.offset_y + maze_height_px { return; }
+                let y_cell = (y_pixel - self.offset_y) / self.cell_size;
+                if y_cell >= maze.height { return; }
+
+                for (x_pixel_in_row, pixel) in row_slice.iter_mut().enumerate() {
+                    let x_pixel = x_pixel_in_row;
+                    if x_pixel < self.offset_x || x_pixel >= self.offset_x + maze_width_px { continue; }
+                    let x_cell = (x_pixel - self.offset_x) / self.cell_size;
+                    if x_cell >= maze.width { continue; }
+
+                    let inner_x = (x_pixel - self.offset_x) % self.cell_size;
+                    let inner_y = (y_pixel - self.offset_y) % self.cell_size;
+
+                    let cell = &maze.grid[y_cell * maze.width + x_cell];
+
+                    let mut is_wall = false;
+                    if cell.walls[0] && inner_y == 0 { is_wall = true; }
+                    if cell.walls[1] && inner_x == self.cell_size - 1 { is_wall = true; }
+                    if cell.walls[2] && inner_y == self.cell_size - 1 { is_wall = true; }
+                    if cell.walls[3] && inner_x == 0 { is_wall = true; }
+
+                    if is_wall { *pixel = wall_color; }
+                }
+            });
+
+        self.draw_path(&[maze.start_point], 0x0000FF00, false);
+        self.draw_path(&[maze.end_point], 0x00FF0000, false);
+        self.update_screen();
+    }
+
+
+    fn draw_path(&mut self, path: &[(usize, usize)], color: u32, slow_draw: bool) {
+        let path_size = (self.cell_size / 2).max(1);
+        let path_offset = (self.cell_size - path_size) / 2;
+        for &(x, y) in path {
+            for dy in 0..path_size {
+                for dx in 0..path_size {
+                    let px = self.offset_x + x * self.cell_size + path_offset + dx;
+                    let py = self.offset_y + y * self.cell_size + path_offset + dy;
+                    let idx = py * self.config.screen_width + px;
+                    if idx < self.buffer.len() {
+                        self.buffer[idx] = color;
+                    }
+                }
+            }
+            if slow_draw {
+                self.update_screen();
+                sleep(Duration::from_micros(100));
+            }
+        }
+        if !slow_draw {
+            self.update_screen();
+        }
+    }
+
+    fn draw_search_animation(&mut self, entire_path: &[(usize, usize)], color: u32, title: &str) {
+        self.draw_text(10, 10, title, 0xFFFFFFFF);
+        let path_size = (self.cell_size / 2).max(1);
+        let path_offset = (self.cell_size - path_size) / 2;
+        let mut batch_counter = 0;
+
+        for &(x, y) in entire_path {
+            for dy in 0..path_size {
+                for dx in 0..path_size {
+                    let px = self.offset_x + x * self.cell_size + path_offset + dx;
+                    let py = self.offset_y + y * self.cell_size + path_offset + dy;
+                    if let Some(pixel) = self.buffer.get_mut(py * self.config.screen_width + px) {
+                        *pixel = color;
+                    }
+                }
+            }
+            batch_counter += 1;
+            if batch_counter >= self.config.batch_size {
+                self.update_screen();
+                sleep(Duration::from_micros(16600)); // ~60fps
+                batch_counter = 0;
+            }
+        }
+        self.update_screen();
+    }
+
+    fn update_screen(&mut self) {
+        self.window.update_with_buffer(&self.buffer, self.config.screen_width, self.config.screen_height).unwrap();
     }
 }
 
-fn draw_path(
-    buffer: &mut [u32], screen_width: usize, path: &[(usize, usize)],
-    cell_size: usize, offset_x: usize, offset_y: usize, color: u32,
-    window: &mut MiniFbWindow, slow_draw: bool,
-) {
-    let path_size = (cell_size / 2).max(1);
-    let path_offset = (cell_size - path_size) / 2;
-    for &(x, y) in path {
-        for dy in 0..path_size {
-            for dx in 0..path_size {
-                let px = offset_x + x * cell_size + path_offset + dx;
-                let py = offset_y + y * cell_size + path_offset + dy;
-                let idx = py * screen_width + px;
-                if idx < buffer.len() {
-                    buffer[idx] = color;
+
+struct Simulation<'a> {
+    config: &'a Config,
+    maze: Maze,
+    viz: Visualization<'a>,
+    maze_created: bool,
+}
+
+// --- CHANGED --- The entire Simulation logic is now a dynamic loop.
+impl<'a> Simulation<'a> {
+    fn new(config: &'a Config) -> Self {
+        Self {
+            config,
+            maze: Maze::new(config.maze_width, config.maze_height),
+            viz: Visualization::new(config),
+            maze_created: false,
+        }
+    }
+
+    fn run(&mut self) {
+        while self.viz.window.is_open() && !self.viz.window.is_key_down(Key::Escape) {
+            if !self.maze_created {
+                self.run_full_simulation();
+                self.maze_created = true;
+            }
+            self.viz.update_screen();
+        }
+    }
+
+    fn run_full_simulation(&mut self) {
+        // Step 1: Generate the maze
+        if self.config.use_perfect_maze {
+            self.maze.generate_iterative();
+        } else {
+            self.maze.generate_with_loops();
+        }
+        
+        if !self.config.skip_visualization {
+            self.viz.draw_maze(&self.maze);
+            sleep(Duration::from_secs(1));
+        }
+        
+        // Step 2: Run all chosen algorithms and collect results
+        let mut results: Vec<PathfindingResult> = Vec::new();
+        
+        for (i, algo) in self.config.algorithms_to_run.iter().enumerate() {
+            let info = get_algorithm_info(*algo);
+            
+            // Calculation is always performed
+            let (steps, duration, path, entire_path) = (info.function)(&self.maze);
+            
+            results.push(PathfindingResult {
+                name: info.name,
+                color: info.path_color,
+                steps,
+                duration,
+                path_len: path.len(),
+            });
+
+            // Visualization only runs if not skipped
+            if !self.config.skip_visualization {
+                let title = format!("Algorithm: {}", info.name);
+                self.viz.draw_search_animation(&entire_path, info.search_color, &title);
+                self.viz.draw_path(&path, info.path_color, true);
+                sleep(Duration::from_secs(2));
+
+                // If this is not the last algorithm to visualize, reset the view
+                if i < self.config.algorithms_to_run.len() - 1 {
+                    self.viz.draw_maze(&self.maze); // Redraw maze to clear paths
+                    sleep(Duration::from_secs(1));
                 }
             }
         }
-        if slow_draw {
-            window.update_with_buffer(&buffer, screen_width, buffer.len() / screen_width).unwrap();
-            sleep(std::time::Duration::from_micros(100));
+        
+        // Step 3: Display the final statistics screen
+        self.display_final_stats(results);
+    }
+    
+    // This is now the one and only stats screen function. It dynamically renders all results.
+    fn display_final_stats(&mut self, results: Vec<PathfindingResult>) {
+        self.viz.buffer.fill(0x00101020);
+        
+        let mut y_offset = 10;
+        self.viz.draw_text(10, y_offset, "--- Pathfinding Results ---", 0xFFFFFFFF);
+        y_offset += 15;
+
+        let maze_type_text = format!("Maze Type:       {}", if self.config.use_perfect_maze { "Perfect (No Loops)" } else { "Imperfect (With Loops)" });
+        let maze_dim_text = format!("Maze Dimensions: {}x{}", self.config.maze_width, self.config.maze_height);
+        self.viz.draw_text(10, y_offset, &maze_type_text, 0xFF808080);
+        y_offset += 10;
+        self.viz.draw_text(10, y_offset, &maze_dim_text, 0xFF808080);
+        y_offset += 25;
+
+        for result in results {
+            let stats1 = format!("Algorithm:      {}", result.name);
+            let stats2 = format!("Steps Taken:    {}", result.steps);
+            let stats3 = format!("Time Elapsed:   {} ms", result.duration);
+            let stats4 = format!("Final Path Len: {}", result.path_len);
+            
+            self.viz.draw_text(10, y_offset, &stats1, result.color);
+            y_offset += 10;
+            self.viz.draw_text(10, y_offset, &stats2, 0xFFFFFFFF);
+            y_offset += 10;
+            self.viz.draw_text(10, y_offset, &stats3, 0xFFFFFFFF);
+            y_offset += 10;
+            self.viz.draw_text(10, y_offset, &stats4, 0xFFFFFFFF);
+            y_offset += 40; // Add spacing for the next algorithm
         }
     }
-    if !slow_draw {
-        window.update_with_buffer(&buffer, screen_width, buffer.len() / screen_width).unwrap();
-    }
 }
+
 
 fn main() {
-    // --- CONFIGURATION ---
-    const SCREEN_WIDTH: usize = 1920;
-    const SCREEN_HEIGHT: usize = 1080;
-    
-    const USE_PERFECT_MAZE: bool = false;
-    const SKIP_VISUALIZATION: bool = false;
-    const MAZE_SIZE: (usize, usize) = (240, 140);
-    const BATCH_SIZE: usize = 40; // Draw this many cells per screen update for a smooth animation
+    // --- CHANGED --- This is now the single point of control.
+    // Simply edit the vector to change which algorithms are run and in what order.
+    let config = Config {
+        // examples:
+        // algorithms_to_run: vec![Algorithm::Bfs],
+        // algorithms_to_run: vec![Algorithm::Dfs, Algorithm::Bfs],
+        algorithms_to_run: vec![Algorithm::Bfs, Algorithm::Dfs],
+        ..Default::default()
+    };
 
-    // --- INITIALIZATION ---
-    let mut buffer: Vec<u32> = vec![0; SCREEN_WIDTH * SCREEN_HEIGHT];
-    let mut window = MiniFbWindow::new(
-        "Maze Pathfinding Comparison",
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT,
-        WindowOptions::default(),
-    )
-    .unwrap();
-    window.set_target_fps(60);
-
-    let mut maze_created = false;
-    
-    let min_margin = 50;
-    let max_cell_width = (SCREEN_WIDTH - 2 * min_margin) / MAZE_SIZE.0;
-    let max_cell_height = (SCREEN_HEIGHT - 2 * min_margin) / MAZE_SIZE.1;
-    let cell_size = max_cell_width.min(max_cell_height).max(1);
-
-    let maze_width_px = MAZE_SIZE.0 * cell_size;
-    let maze_height_px = MAZE_SIZE.1 * cell_size;
-    let offset_x = (SCREEN_WIDTH.saturating_sub(maze_width_px)) / 2;
-    let offset_y = (SCREEN_HEIGHT.saturating_sub(maze_height_px)) / 2;
-
-    while window.is_open() && !window.is_key_down(minifb::Key::Escape) {
-        if !maze_created {
-            let mut maze = Maze::new(MAZE_SIZE.0, MAZE_SIZE.1);
-            if USE_PERFECT_MAZE {
-                maze.generate_iterative();
-            } else {
-                maze.generate_with_loops();
-            }
-
-            buffer.fill(0x00101020);
-            let wall_color = 0xFF808080;
-
-            if !SKIP_VISUALIZATION {
-                buffer
-                    .par_chunks_mut(SCREEN_WIDTH)
-                    .enumerate()
-                    .for_each(|(y_pixel, row_slice)| {
-                        if y_pixel < offset_y || y_pixel >= offset_y + maze_height_px { return; }
-                        let y_cell = (y_pixel - offset_y) / cell_size;
-                        if y_cell >= maze.height { return; }
-
-                        for (x_pixel_in_row, pixel) in row_slice.iter_mut().enumerate() {
-                            let x_pixel = x_pixel_in_row;
-                            if x_pixel < offset_x || x_pixel >= offset_x + maze_width_px { continue; }
-                            let x_cell = (x_pixel - offset_x) / cell_size;
-                            if x_cell >= maze.width { continue; }
-
-                            let inner_x = (x_pixel - offset_x) % cell_size;
-                            let inner_y = (y_pixel - offset_y) % cell_size;
-
-                            let cell = &maze.grid[y_cell * maze.width + x_cell];
-
-                            let mut is_wall = false;
-                            if cell.walls[0] && inner_y == 0 { is_wall = true; }
-                            if cell.walls[1] && inner_x == cell_size - 1 { is_wall = true; }
-                            if cell.walls[2] && inner_y == cell_size - 1 { is_wall = true; }
-                            if cell.walls[3] && inner_x == 0 { is_wall = true; }
-
-                            if is_wall { *pixel = wall_color; }
-                        }
-                    });
-                draw_path(&mut buffer, SCREEN_WIDTH, &[maze.start_point], cell_size, offset_x, offset_y, 0x0000FF00, &mut window, false);
-                draw_path(&mut buffer, SCREEN_WIDTH, &[maze.end_point], cell_size, offset_x, offset_y, 0x00FF0000, &mut window, false);
-                window.update_with_buffer(&buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();
-                sleep(std::time::Duration::from_secs(1));
-            }
-
-            let (bfs_steps, bfs_duration, bfs_path, bfs_entire_path) = maze.path_finding_bfs();
-            let (dfs_steps, dfs_duration, dfs_path, dfs_entire_path) = maze.path_finding_dfs();
-            
-            if !SKIP_VISUALIZATION {
-                let path_size = (cell_size / 2).max(1);
-                let path_offset = (cell_size - path_size) / 2;
-                let draw_cell = |buffer: &mut Vec<u32>, x: usize, y: usize, color: u32| {
-                    for dy in 0..path_size {
-                        for dx in 0..path_size {
-                            let px = offset_x + x * cell_size + path_offset + dx;
-                            let py = offset_y + y * cell_size + path_offset + dy;
-                            if let Some(pixel) = buffer.get_mut(py * SCREEN_WIDTH + px) {
-                                *pixel = color;
-                            }
-                        }
-                    }
-                };
-
-                // --- BFS Visualization (Optimized with Batching) ---
-                draw_text(&mut buffer, SCREEN_WIDTH, 10, 10, "Algorithm: BFS", 0xFFFFFFFF);
-                let mut batch_counter = 0;
-                for &(x, y) in &bfs_entire_path {
-                    draw_cell(&mut buffer, x, y, 0xAA0000FF);
-                    batch_counter += 1;
-                    if batch_counter >= BATCH_SIZE {
-                        window.update_with_buffer(&buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();
-                        sleep(std::time::Duration::from_micros(16600)); // ~60fps
-                        batch_counter = 0;
-                    }
-                }
-                // Clean up for next draw
-                window.update_with_buffer(&buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();
-                draw_path(&mut buffer, SCREEN_WIDTH, &bfs_path, cell_size, offset_x, offset_y, 0xAAFFFF00, &mut window, true);
-                sleep(std::time::Duration::from_secs(3));
-
-                draw_path(&mut buffer, SCREEN_WIDTH, &bfs_entire_path, cell_size, offset_x, offset_y, 0x00101020, &mut window, false);
-                draw_path(&mut buffer, SCREEN_WIDTH, &bfs_path, cell_size, offset_x, offset_y, 0x00101020, &mut window, false);
-                draw_path(&mut buffer, SCREEN_WIDTH, &[maze.start_point], cell_size, offset_x, offset_y, 0x0000FF00, &mut window, false);
-                draw_path(&mut buffer, SCREEN_WIDTH, &[maze.end_point], cell_size, offset_x, offset_y, 0x00FF0000, &mut window, false);
-                draw_text(&mut buffer, SCREEN_WIDTH, 10, 10, "                 ", 0x00101020);
-                window.update_with_buffer(&buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();
-                sleep(std::time::Duration::from_secs(1));
-
-                // --- DFS Visualization (Optimized with Batching) ---
-                draw_text(&mut buffer, SCREEN_WIDTH, 10, 10, "Algorithm: DFS", 0xFFFFFFFF);
-                batch_counter = 0;
-                for &(x, y) in &dfs_entire_path {
-                    draw_cell(&mut buffer, x, y, 0xAA00FFFF);
-                    batch_counter += 1;
-                    if batch_counter >= BATCH_SIZE {
-                        window.update_with_buffer(&buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();
-                        sleep(std::time::Duration::from_micros(16600)); // ~60fps
-                        batch_counter = 0;
-                    }
-                }
-                window.update_with_buffer(&buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();
-                draw_path(&mut buffer, SCREEN_WIDTH, &dfs_path, cell_size, offset_x, offset_y, 0xAAFF00FF, &mut window, true);
-                sleep(std::time::Duration::from_secs(3));
-            }
-
-            buffer.fill(0x00101020);
-            draw_text(&mut buffer, SCREEN_WIDTH, 10, 10, "--- Pathfinding Comparison ---", 0xFFFFFFFF);
-            let maze_type_text = format!("Maze Type:       {}", if USE_PERFECT_MAZE { "Perfect (No Loops)" } else { "Imperfect (With Loops)" });
-            let maze_dim_text = format!("Maze Dimensions: {}x{}", MAZE_SIZE.0, MAZE_SIZE.1);
-            draw_text(&mut buffer, SCREEN_WIDTH, 10, 25, &maze_type_text, 0xFF808080);
-            draw_text(&mut buffer, SCREEN_WIDTH, 10, 35, &maze_dim_text, 0xFF808080);
-            
-            let bfs_stats1 = format!("Algorithm:      BFS");
-            let bfs_stats2 = format!("Steps Taken:    {}", bfs_steps);
-            let bfs_stats3 = format!("Time Elapsed:   {} ms", bfs_duration);
-            let bfs_stats4 = format!("Final Path Len: {}", bfs_path.len());
-
-            draw_text(&mut buffer, SCREEN_WIDTH, 10, 60, &bfs_stats1, 0xAAFFFF00);
-            draw_text(&mut buffer, SCREEN_WIDTH, 10, 70, &bfs_stats2, 0xFFFFFFFF);
-            draw_text(&mut buffer, SCREEN_WIDTH, 10, 80, &bfs_stats3, 0xFFFFFFFF);
-            draw_text(&mut buffer, SCREEN_WIDTH, 10, 90, &bfs_stats4, 0xFFFFFFFF);
-
-            let dfs_stats1 = format!("Algorithm:      DFS");
-            let dfs_stats2 = format!("Steps Taken:    {}", dfs_steps);
-            let dfs_stats3 = format!("Time Elapsed:   {} ms", dfs_duration);
-            let dfs_stats4 = format!("Final Path Len: {}", dfs_path.len());
-            
-            draw_text(&mut buffer, SCREEN_WIDTH, 10, 130, &dfs_stats1, 0xAAFF00FF);
-            draw_text(&mut buffer, SCREEN_WIDTH, 10, 140, &dfs_stats2, 0xFFFFFFFF);
-            draw_text(&mut buffer, SCREEN_WIDTH, 10, 150, &dfs_stats3, 0xFFFFFFFF);
-            draw_text(&mut buffer, SCREEN_WIDTH, 10, 160, &dfs_stats4, 0xFFFFFFFF);
-            
-            maze_created = true;
-        }
-
-        window.update_with_buffer(&buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_maze_new() {
-        let width = 10;
-        let height = 15;
-        let maze = Maze::new(width, height);
-
-        assert_eq!(maze.width, width);
-        assert_eq!(maze.height, height);
-        assert_eq!(maze.grid.len(), width * height);
-
-        // All cells should be initialized with 4 walls and not visited.
-        for cell in maze.grid.iter() {
-            assert!(cell.walls.iter().all(|&w| w));
-            assert!(!cell.visited);
-        }
-    }
-
-    #[test]
-    fn test_generate_iterative_visits_all_cells() {
-        let mut maze = Maze::new(5, 5);
-        maze.generate_iterative();
-
-        // The generation algorithm should visit every cell.
-        for cell in maze.grid.iter() {
-            assert!(cell.visited);
-        }
-    }
-    
-    #[test]
-    fn test_generate_with_loops_visits_all_cells() {
-        let mut maze = Maze::new(8, 8);
-        maze.generate_with_loops();
-
-        // The generation algorithm (even with loops) should visit every cell.
-        for cell in maze.grid.iter() {
-            assert!(cell.visited);
-        }
-    }
-
-    #[test]
-    fn test_bfs_finds_shortest_path() {
-        // Create a simple, predictable maze.
-        //  S ╴ E
-        let mut maze = Maze::new(3, 1);
-        maze.grid[0].walls = [true, false, true, true]; // Path to the right
-        maze.grid[1].walls = [true, false, true, false];
-        maze.grid[2].walls = [true, true, true, false]; // Path from the left
-
-        let (_, _, path, _) = maze.path_finding_bfs();
-
-        assert_eq!(path.len(), 3, "BFS should find the shortest path of length 3.");
-        assert_eq!(path[0], (0, 0), "Path should start at the start point.");
-        assert_eq!(path[2], (2, 0), "Path should end at the end point.");
-        assert_eq!(path, vec![(0, 0), (1, 0), (2, 0)]);
-    }
-
-    #[test]
-    fn test_dfs_finds_a_valid_path() {
-        // Create a simple, predictable maze.
-        // S
-        // |
-        // E
-        let mut maze = Maze::new(1, 3);
-        maze.end_point = (0, 2);
-        
-        maze.grid[0].walls = [true, true, false, true]; // Path downwards
-        maze.grid[1].walls = [false, true, false, true];
-        maze.grid[2].walls = [false, true, true, true]; // Path from above
-
-        let (_, _, path, _) = maze.path_finding_dfs();
-
-        assert!(!path.is_empty(), "DFS should find a path.");
-        assert_eq!(path[0], (0, 0), "Path should start at the start point.");
-        assert_eq!(path.last().unwrap(), &maze.end_point, "Path should end at the end point.");
-        assert_eq!(path, vec![(0, 0), (0, 1), (0, 2)]);
-    }
-    
-    #[test]
-    fn test_no_path_found() {
-        // Create a maze with no possible path from start to end.
-        let  maze = Maze::new(3, 3);
-        // All walls are up by default, so no path exists.
-
-        let (_, _, bfs_path, _) = maze.path_finding_bfs();
-        let (_, _, dfs_path, _) = maze.path_finding_dfs();
-
-        // When no path is found, the resulting "path" should only contain the end point,
-        // as the loop breaks without connecting back to the start. Or it might be empty
-        // depending on implementation details. Let's check the current behavior.
-        assert_ne!(bfs_path.last().unwrap(), &maze.start_point, "BFS path should not reach the start if no path exists.");
-        assert_ne!(dfs_path.last().unwrap(), &maze.start_point, "DFS path should not reach the start if no path exists.");
-    }
+    let mut simulation = Simulation::new(&config);
+    simulation.run();
 }
